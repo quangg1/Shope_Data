@@ -1,7 +1,7 @@
 streamlit
 pandas
 numpy
-bs4 
+beautifulsoup4 
 requests
 json
 re
