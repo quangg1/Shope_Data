@@ -3,4 +3,3 @@ pandas
 numpy
 beautifulsoup4 
 requests
-re
