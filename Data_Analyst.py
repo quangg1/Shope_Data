@@ -1,74 +1,236 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-from bs4 import BeautifulSoup
 import requests
-import json
+import pandas as pd
 import re
-st.set_page_config(page_title="CSV Analyzer", layout="wide")
+from datetime import datetime, timedelta
+import concurrent.futures
+# ==== Hàm lấy danh sách sản phẩm từ Shopee ====
+def fetch_live_sessions(cookies, days_ago):
+    base_url = "https://creator.shopee.vn/supply/api/lm/sellercenter/liveList/v2"
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    all_sessions = []
 
-st.title("📊 CSV Data Analyzer")
+    def get_sessions_for_day(i):
+        date_str = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+        params = {
+    "page": 1,
+    "pageSize": 10,
+    "name": "",
+    "orderBy": "",
+    "sort": "",
+    "timeDim": "1d",
+    "endDate": date_str  # Chỉ lấy dữ liệu trong ngày đó
+}
+        response = requests.get(base_url, params=params, headers=headers, cookies=cookies)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 0 and "list" in data.get("data", {}):
+                return [live["sessionId"] for live in data["data"]["list"]]
+        return []
 
-# Upload CSV file
-uploaded_file = st.file_uploader("Chọn file CSV để phân tích (Chỉ dùng cho lấy sản phẩm ở Afffiliate)", type=["csv"])
-def preprocess_sold_column(df):
-    if 'Sold' in df.columns:
-        df['Sold'] = df['Sold'].astype(str).str.replace('lượt bán', '', regex=True).str.strip()
-        df['Sold'] = df['Sold'].str.replace(',', '.')  # Thay dấu phẩy thành dấu chấm
-        df['Sold'] = df['Sold'].apply(lambda x: float(x.replace('k', '')) * 1000 if 'k' in x else float(x) if x.replace('.', '', 1).isdigit() else np.nan)
-    return df
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = executor.map(get_sessions_for_day, range(1, days_ago + 1))
 
+    for result in results:
+        all_sessions.extend(result)
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+    return all_sessions
+def fetch_shopee_products(cookies, sessionId):
+    base_url = "https://creator.shopee.vn/supply/api/lm/sellercenter/realtime/dashboard/productList?"
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     
-    # Display full dataframe with scroll
-    st.subheader("📌 Dữ liệu tải lên:")
-    st.dataframe(df, height=500)
+    params = {
+    "sessionId": sessionId,
+    "productName": "",
+    "productListTimeRange": 0,
+    "productListOrderBy": "itemSold",
+    "sort": "asc",
+    "page": 1,
+    "pageSize": 10
+}
     
-    # Processing options
-    st.subheader("⚙️ Xử lý dữ liệu")
+    # Lấy số trang tổng cộng
+    response = requests.get(base_url, params=params, headers=headers, cookies=cookies)
+    if response.status_code != 200:
+        return []
     
-    if st.button("📈 Hiển thị thống kê mô tả"):
-        st.write(df.describe())
+    data = response.json()
+    if data.get("code") != 0 or not data.get("data"):
+        return []
     
+    total_pages = data["data"]["totalPage"]
+    all_products = []
 
-    if st.button("Lọc dữ liệu"):
-        df = preprocess_sold_column(df)
-        st.write("### Dữ liệu sau khi lọc")
-        st.dataframe(df, height=400)
-    # Chọn cột để copy dữ liệu
-    column_to_copy = st.selectbox("Chọn cột để sao chép dữ liệu:", df.columns)
-    row_range = st.text_input("Nhập phạm vi dòng (ví dụ: 2,100):")
-    
-    if st.button("Sao chép dữ liệu cột"):
-        try:
-            start, end = map(int, row_range.split(","))
-            copied_text = ';'.join(df[column_to_copy].astype(str).iloc[start-1:end].tolist())
-            st.text_area("Dữ liệu đã sao chép:", copied_text, height=200)
-        except:
-            st.error("Vui lòng nhập phạm vi hợp lệ (ví dụ: 2,100)")
-##############################################      
+    def fetch_page(page):
+        """Hàm lấy dữ liệu của từng trang"""
+        params["page"] = page
+        response = requests.get(base_url, params=params, headers=headers, cookies=cookies)
+        if response.status_code == 200:
+            page_data = response.json()
+            if page_data.get("code") == 0 and page_data.get("data"):
+                return page_data["data"]["list"]
+        return []
 
-
-# Nhập dữ liệu
-search_values = st.text_area("Nhập các giá trị cần tìm (ngăn cách bằng dấu ;):")
+    # Chạy đa luồng để lấy dữ liệu của từng trang
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(fetch_page, range(1, total_pages + 1)))
     
-if st.button("Tìm vị trí"):
-    if search_values:
-        values_list = [val.strip() for val in search_values.split(";")]
-        matched_indexes = []
-            
-        for val in values_list:
-            matched_rows = df[df[column_to_copy].astype(str) == val].index.tolist()
-            matched_indexes.extend(matched_rows)
-            
-        matched_indexes = sorted(set(matched_indexes))  # Loại bỏ trùng lặp và sắp xếp
-            
-        if matched_indexes:
-            st.write("### Kết quả:")
-            st.write(f"Các dòng chứa giá trị tìm kiếm: {matched_indexes}")
-        else:
-            st.warning("Không tìm thấy giá trị nào trong cột đã chọn.")
+    # Ghép toàn bộ dữ liệu sản phẩm lại
+    all_products = [product for sublist in results for product in sublist]
+
+    # Xử lý dữ liệu sản phẩm
+    return [
+        {
+            "Index": i + 1,
+            "ID": product.get("itemId", "N/A"),
+            "Ảnh sản phẩm": f'<img src="https://down-zl-vn.img.susercontent.com/{product["coverImage"]}" width="150">' if "coverImage" in product else "N/A",
+            "Tên sản phẩm": product.get("title", "Không có tên"),
+            "Giá thấp nhất": product.get("minPrice", "N/A"),
+            "Giá cao nhất": product.get("maxPrice", "N/A"),
+            "Số lần nhấp chuột": product.get("productClicks", 0),
+            "CTR (%)": product.get("ctr", 0.0),
+            "Số lượt thêm vào giỏ": product.get("atc", 0),
+            "Đơn hàng tạo ra": product.get("ordersCreated", 0),
+            "Doanh thu": product.get("revenue", 0.0),
+            "Số lượng bán": product.get("itemSold", 0),
+            "COR (%)": product.get("cor", 0.0),
+            "Đơn hàng xác nhận": product.get("confirmedOrderCnt", 0),
+            "Doanh thu xác nhận": product.get("confirmedRevenue", 0.0),
+            "Số lượng bán xác nhận": product.get("confirmedItemSold", 0),
+            "COR xác nhận (%)": product.get("confirmedCor", 0.0),
+            "Link Shopee": f'<a href="https://affiliate.shopee.vn/offer/product_offer/{product["itemId"]}" target="_blank">🔗 Xem</a>'
+        }
+        for i, product in enumerate(all_products)
+    ]
+def extract_number(value):
+    """Trích xuất phần số từ chuỗi, bỏ ký tự không liên quan."""
+    try:
+        return float(re.sub(r"[^\d.]", "", str(value))) if re.sub(r"[^\d.]", "", str(value)) else 0
+    except:
+        return 0
+# ==== Giao diện Streamlit ====
+st.set_page_config(page_title="Shopee Product Scraper", layout="wide")
+st.title("📦 Shopee Product Scraper")
+if "filter_column" not in st.session_state:
+    st.session_state["filter_column"] = None
+if "sort_order" not in st.session_state:
+    st.session_state["sort_order"] = "Cao → Thấp"
+if "trigger_filter" not in st.session_state:
+    st.session_state["trigger_filter"] = False 
+
+# Nhập cookies
+st.subheader("🔐 Nhập Cookies Shopee")
+cookies_input = st.text_area("Nhập cookies của bạn vào đây:", height=100,key="cookies_input")
+if st.button("Lưu Cookies"):
+    if cookies_input:
+        st.session_state["cookies"] = {"Cookie": cookies_input}
+        st.success("✅ Cookies đã được lưu!")
     else:
-        st.error("Vui lòng nhập các giá trị cần tìm kiếm!")
+        st.warning("⚠️ Vui lòng nhập cookies trước khi lưu.")
+
+
+st.subheader("📅 Chọn số ngày muốn lấy dữ liệu")
+
+# Input để chọn số ngày trước
+days_ago = st.number_input("Nhập số ngày trước:", min_value=0, max_value=30, value=0, step=1)
+
+
+
+
+# Nếu chọn ngày thì lấy sessionId của các phiên live
+if st.button("Lấy dữ liệu") or days_ago !=0:
+    if "cookies" not in st.session_state or not st.session_state["cookies"]:
+        st.error("❌ Chưa có cookies! Vui lòng nhập và lưu cookies trước.")
+    else:
+        st.info(f"⏳ Đang lấy danh sách phiên live của {days_ago} ngày trước...")
+        session_ids = fetch_live_sessions(st.session_state["cookies"], days_ago)
+
+        if session_ids:
+            st.success(f"✅ Tìm thấy {len(session_ids)} phiên live!")
+            all_products = []
+
+            for session_id in session_ids:
+                st.info(f"📦 Đang lấy sản phẩm từ phiên live {session_id}...")
+                products = fetch_shopee_products(st.session_state["cookies"], session_id)
+                all_products.extend(products)
+
+            if all_products:
+                df = pd.DataFrame(all_products)
+                st.session_state["df"] = df  # Lưu vào session state
+                df_filtered = df[(df["Số lượng bán xác nhận"] != 0) & (df["Số lần nhấp chuột"] != 0)]
+                df_filtered["Index"] = range(1, len(df_filtered) + 1)
+                st.markdown("""
+                <style>
+                .scroll-table {
+                    max-height: 500px;
+                    overflow-y: auto;
+                    overflow-x: auto;
+                    border: 1px solid #ddd;
+                    padding: 10px;
+                    white-space: nowrap;
+                }
+                th {
+                    position: sticky;
+                    top: 0;
+                    background: black;
+                    z-index: 1;
+                }
+                td- 1nd-child,th-1nd-child {
+                 min-width:200px;   }
+                </style>
+                """, unsafe_allow_html=True)
+                # Hiển thị bảng sản phẩm
+                st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
+            else:
+                st.warning("⚠️ Không có sản phẩm nào trong các phiên live này.")
+        else:
+            st.warning("⚠️ Không tìm thấy phiên live nào trong khoảng thời gian đã chọn.")
+if "df_filtered" not in st.session_state:
+    st.session_state["df_filtered"] = None
+
+df = st.session_state.get("df", None)
+if "df" in st.session_state and not st.session_state["df"].empty:
+    filter_column = st.selectbox("Chọn cột muốn lọc:", st.session_state["df"].columns, key="filter_column")
+    sort_order = st.radio("Chọn kiểu sắp xếp:", ["Cao → Thấp", "Thấp → Cao"], key="sort_order")
+if st.button("🛒 Lọc giỏ live") and filter_column:
+    ascending = True if sort_order == "Thấp → Cao" else False
+    df_filtered = df_filtered.sort_values(by=filter_column, ascending=ascending)
+    df_filtered["Index"]=range(1, len(df_filtered)+1) # Đánh lại số thứ tự
+
+    # Lưu lại dữ liệu đã lọc
+    st.session_state["df"] = df_filtered
+
+    # Hiển thị kết quả
+    st.success(f"✅ Đã lọc theo cột '{filter_column}' ({sort_order})!")
+    st.markdown("""
+                <style>
+                .scroll-table {
+                    max-height: 500px;
+                    overflow-y: auto;
+                    overflow-x: auto;
+                    border: 1px solid #ddd;
+                    padding: 10px;
+                    white-space: nowrap;
+                }
+                th {
+                    position: sticky;
+                    top: 0;
+                    background: black;
+                    z-index: 1;
+                }
+                td- 1nd-child,th-1nd-child {
+                 min-width:200px;   }
+                </style>
+                """, unsafe_allow_html=True)
+    st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
+# Xuất danh sách link nếu nhấn nút
+if "df" in st.session_state and not st.session_state["df"].empty:
+    if st.button("📤 Xuất Link"):
+        product_links = "\n".join(re.findall(r'href="([^"]+)"', " ".join(st.session_state["df"]["Link Shopee"].tolist())))
+        st.text_area(product_links)
+
+# Nút Refresh để hiển thị lại dữ liệu gốc
+if st.button("🔄 Refresh"):
+    if "df" in st.session_state:
+        del st.session_state["df"]
+    st.rerun()
