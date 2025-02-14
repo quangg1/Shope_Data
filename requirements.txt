@@ -3,5 +3,4 @@ pandas
 numpy
 beautifulsoup4 
 requests
-concurrent.futures
-datetime
+
