@@ -127,30 +127,67 @@ if st.button("Lưu Cookies"):
         st.warning("⚠️ Vui lòng nhập cookies trước khi lưu.")
 
 
-st.subheader("📅 Chọn số ngày muốn lấy dữ liệu")
+st.subheader("🔧 Chọn chế độ nhập dữ liệu")
+option = st.radio("Chọn cách lấy dữ liệu:", ["Nhập sessionId", "Lấy theo số ngày"])
 
-# Input để chọn số ngày trước
-days_ago = st.number_input("Nhập số ngày trước:", min_value=-1, max_value=30, value=0, step=1)
+session_id = None
+days_ago = None
+
+if option == "Nhập sessionId":
+    session_id = st.text_input("Nhập sessionId:")
+else:
+    days_ago = st.number_input("Nhập số ngày trước:", min_value=0, max_value=30, value=1, step=1)
 
 
 
 
 # Nếu chọn ngày thì lấy sessionId của các phiên live
-if st.button("Lấy dữ liệu") or days_ago !=-1:
+if st.button("Lấy dữ liệu") or days_ago !=1:
     if "cookies" not in st.session_state or not st.session_state["cookies"]:
         st.error("❌ Chưa có cookies! Vui lòng nhập và lưu cookies trước.")
     else:
-        st.info(f"⏳ Đang lấy danh sách phiên live của {days_ago} ngày trước...")
-        session_ids = fetch_live_sessions(st.session_state["cookies"], days_ago)
+        if session_id:
+            st.info(f"📦 Đang lấy sản phẩm từ phiên live {session_id}...")
+            products = fetch_shopee_products(st.session_state["cookies"], session_id)
+            df = pd.DataFrame(products)
+            st.session_state["df"] = df  # Lưu vào session state
+            df_filtered = df[(df["Số lượng bán xác nhận"] != 0) & (df["Số lần nhấp chuột"] != 0)]
+            df_filtered["Index"] = range(1, len(df_filtered) + 1)
+            st.session_state["df_filtered"] = df_filtered
+            st.markdown("""
+                <style>
+                .scroll-table {
+                    max-height: 500px;
+                    overflow-y: auto;
+                    overflow-x: auto;
+                    border: 1px solid #ddd;
+                    padding: 10px;
+                    white-space: nowrap;
+                }
+                th {
+                    position: sticky;
+                    top: 0;
+                    background: black;
+                    z-index: 1;
+                }
+                td- 1nd-child,th-1nd-child {
+                 min-width:200px;   }
+                </style>
+                """, unsafe_allow_html=True)
+                # Hiển thị bảng sản phẩm
+            st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
+        if days_ago is not None:
+            session_ids = fetch_live_sessions(st.session_state["cookies"], days_ago)
 
-        if session_ids:
-            st.success(f"✅ Tìm thấy {len(session_ids)} phiên live!")
-            all_products = []
+            if session_ids:
+                st.success(f"✅ Tìm thấy {len(session_ids)} phiên live!")
+                all_products = []
 
-            for session_id in session_ids:
-                st.info(f"📦 Đang lấy sản phẩm từ phiên live {session_id}...")
-                products = fetch_shopee_products(st.session_state["cookies"], session_id)
-                all_products.extend(products)
+                for session_id in session_ids:
+                    st.info(f"📦 Đang lấy sản phẩm từ phiên live {session_id}...")
+                    products = fetch_shopee_products(st.session_state["cookies"], session_id)
+                    all_products.extend(products)
+        
 
             if all_products:
                 df = pd.DataFrame(all_products)
@@ -182,8 +219,6 @@ if st.button("Lấy dữ liệu") or days_ago !=-1:
                 st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
             else:
                 st.warning("⚠️ Không có sản phẩm nào trong các phiên live này.")
-        else:
-            st.warning("⚠️ Không tìm thấy phiên live nào trong khoảng thời gian đã chọn.")
 df_filtered = st.session_state.get("df_filtered", pd.DataFrame())
 if st.session_state["df_filtered"] is not None:
     filter_column = st.selectbox("Chọn cột muốn lọc:", df_filtered.columns, key="filter_column")
