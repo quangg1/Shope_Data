@@ -111,12 +111,10 @@ def extract_number(value):
 # ==== Giao diện Streamlit ====
 st.set_page_config(page_title="Shopee Product Scraper", layout="wide")
 st.title("📦 Shopee Product Scraper")
-if "filter_column" not in st.session_state:
-    st.session_state["filter_column"] = None
-if "sort_order" not in st.session_state:
-    st.session_state["sort_order"] = "Cao → Thấp"
-if "trigger_filter" not in st.session_state:
-    st.session_state["trigger_filter"] = False 
+if "df" not in st.session_state:
+    st.session_state["df"] = None
+if "df_filtered" not in st.session_state:
+    st.session_state["df_filtered"] = None
 
 # Nhập cookies
 st.subheader("🔐 Nhập Cookies Shopee")
@@ -223,13 +221,21 @@ if not df_filtered.empty:
                 """, unsafe_allow_html=True)
             st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
 # Xuất danh sách link nếu nhấn nút
-if "df" in st.session_state and not st.session_state["df"].empty:
-    if st.button("📤 Xuất Link"):
-        product_links = "\n".join(re.findall(r'href="([^"]+)"', " ".join(st.session_state["df"]["Link Shopee"].tolist())))
-        st.text_area(product_links)
+df_filtered = st.session_state.get("df_filtered", None)
+df = st.session_state.get("df", None)
 
-# Nút Refresh để hiển thị lại dữ liệu gốc
+# 🟢 Nếu có df_filtered (dữ liệu đã lọc), ưu tiên dùng nó
+df_to_export = df_filtered if df_filtered is not None else df
+
+if df_to_export is not None and not df_to_export.empty:
+    if st.button("📤 Xuất Link"):
+        product_links = "\n".join(re.findall(r'href="([^"]+)"', " ".join(df_to_export["Link Shopee"].tolist())))
+        st.text_area("Danh sách link sản phẩm:", product_links, height=300)
+
+# 🔄 Nút Refresh để reset dữ liệu gốc
 if st.button("🔄 Refresh"):
     if "df" in st.session_state:
         del st.session_state["df"]
+    if "df_filtered" in st.session_state:
+        del st.session_state["df_filtered"]
     st.rerun()
