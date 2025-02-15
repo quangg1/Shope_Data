@@ -130,7 +130,7 @@ if st.button("Lưu Cookies"):
 st.subheader("📅 Chọn số ngày muốn lấy dữ liệu")
 
 # Input để chọn số ngày trước
-days_ago = st.number_input("Nhập số ngày trước:", min_value=0, max_value=30, value=0, step=1)
+days_ago = st.number_input("Nhập số ngày trước:", min_value=-1, max_value=30, value=0, step=1)
 
 
 
