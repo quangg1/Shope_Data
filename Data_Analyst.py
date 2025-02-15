@@ -193,16 +193,19 @@ if "df" in st.session_state and not st.session_state["df"].empty:
     filter_column = st.selectbox("Chọn cột muốn lọc:", st.session_state["df"].columns, key="filter_column")
     sort_order = st.radio("Chọn kiểu sắp xếp:", ["Cao → Thấp", "Thấp → Cao"], key="sort_order")
 if st.button("🛒 Lọc giỏ live") and filter_column:
-    ascending = True if sort_order == "Thấp → Cao" else False
-    df_filtered = df_filtered.sort_values(by=filter_column, ascending=ascending)
-    df_filtered["Index"]=range(1, len(df_filtered)+1) # Đánh lại số thứ tự
+    if "df" in st.session_state and not st.session_state["df"].empty:
+        df_filtered = st.session_state["df"].copy()
+    if filter_column in df_filtered.columns: 
+        ascending = True if sort_order == "Thấp → Cao" else False
+        df_filtered = df_filtered.sort_values(by=filter_column, ascending=ascending)
+        df_filtered["Index"]=range(1, len(df_filtered)+1) # Đánh lại số thứ tự
 
     # Lưu lại dữ liệu đã lọc
-    st.session_state["df"] = df_filtered
+        st.session_state["df"] = df_filtered
 
     # Hiển thị kết quả
-    st.success(f"✅ Đã lọc theo cột '{filter_column}' ({sort_order})!")
-    st.markdown("""
+        st.success(f"✅ Đã lọc theo cột '{filter_column}' ({sort_order})!")
+        st.markdown("""
                 <style>
                 .scroll-table {
                     max-height: 500px;
@@ -222,7 +225,7 @@ if st.button("🛒 Lọc giỏ live") and filter_column:
                  min-width:200px;   }
                 </style>
                 """, unsafe_allow_html=True)
-    st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
 # Xuất danh sách link nếu nhấn nút
 if "df" in st.session_state and not st.session_state["df"].empty:
     if st.button("📤 Xuất Link"):
