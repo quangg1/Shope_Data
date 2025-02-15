@@ -136,7 +136,7 @@ days_ago = st.number_input("Nhập số ngày trước:", min_value=0, max_value
 
 
 # Nếu chọn ngày thì lấy sessionId của các phiên live
-if st.button("Lấy dữ liệu") or days_ago !=0:
+if st.button("Lấy dữ liệu") or days_ago !=-1:
     if "cookies" not in st.session_state or not st.session_state["cookies"]:
         st.error("❌ Chưa có cookies! Vui lòng nhập và lưu cookies trước.")
     else:
@@ -188,16 +188,16 @@ df_filtered = st.session_state.get("df_filtered", pd.DataFrame())
 if st.session_state["df_filtered"] is not None:
     filter_column = st.selectbox("Chọn cột muốn lọc:", df_filtered.columns, key="filter_column")
     sort_order = st.radio("Chọn kiểu sắp xếp:", ["Cao → Thấp", "Thấp → Cao"], key="sort_order")
-    if st.button("🛒 Lọc giỏ live") and filter_column:
+    if st.button("🛒 Lọc giỏ live") or filter_column:
         if filter_column in df_filtered.columns: 
             ascending = True if sort_order == "Thấp → Cao" else False
             df_filtered = df_filtered.sort_values(by=filter_column, ascending=ascending)
-            df_filtered["Index"]=range(1, len(df_filtered)+1) # Đánh lại số thứ tự
+            df_filtered["Index"] = range(1, len(df_filtered) + 1)  # Đánh lại số thứ tự
 
-    # Lưu lại dữ liệu đã lọc
+            # Lưu lại dữ liệu đã lọc
             st.session_state["df_filtered"] = df_filtered
 
-    # Hiển thị kết quả
+            # Hiển thị kết quả
             st.success(f"✅ Đã lọc theo cột '{filter_column}' ({sort_order})!")
             st.markdown("""
                 <style>
@@ -220,6 +220,7 @@ if st.session_state["df_filtered"] is not None:
                 </style>
                 """, unsafe_allow_html=True)
             st.markdown(f'<div class="scroll-table">{df_filtered.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
+
 # Xuất danh sách link nếu nhấn nút
 df_filtered = st.session_state.get("df_filtered", None)
 df = st.session_state.get("df", None)
@@ -231,6 +232,16 @@ if df_to_export is not None and not df_to_export.empty:
     if st.button("📤 Xuất Link"):
         product_links = "\n".join(re.findall(r'href="([^"]+)"', " ".join(df_to_export["Link Shopee"].tolist())))
         st.text_area("Danh sách link sản phẩm:", product_links, height=300)
+
+# Xuất danh sách tên sản phẩm theo index
+if df_filtered is not None and not df_filtered.empty:
+    st.subheader("📋 Xuất danh sách tên sản phẩm theo Index")
+    start_index = st.number_input("Nhập Index bắt đầu:", min_value=1, value=1)
+    end_index = st.number_input("Nhập Index kết thúc:", min_value=1, value=10)
+    
+    if st.button("📤 Xuất Tên Sản Phẩm"):
+        product_names = "\n".join(df_filtered.iloc[start_index-1:end_index]["Tên sản phẩm"].tolist())
+        st.text_area("Danh sách tên sản phẩm:", product_names, height=300)
 
 # 🔄 Nút Refresh để reset dữ liệu gốc
 if st.button("🔄 Refresh"):
