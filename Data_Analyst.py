@@ -29,7 +29,7 @@ def fetch_live_sessions(cookies, days_ago):
         return []
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = executor.map(get_sessions_for_day, range(1, days_ago + 1))
+        results = executor.map(get_sessions_for_day, range(0, days_ago + 1))
 
     for result in results:
         all_sessions.extend(result)
