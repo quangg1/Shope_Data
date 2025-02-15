@@ -185,7 +185,7 @@ if st.button("Lấy dữ liệu") or days_ago !=0:
         else:
             st.warning("⚠️ Không tìm thấy phiên live nào trong khoảng thời gian đã chọn.")
 df_filtered = st.session_state.get("df_filtered", pd.DataFrame())
-if not df_filtered.empty:
+if st.session_state["df_filtered"] is not None:
     filter_column = st.selectbox("Chọn cột muốn lọc:", df_filtered.columns, key="filter_column")
     sort_order = st.radio("Chọn kiểu sắp xếp:", ["Cao → Thấp", "Thấp → Cao"], key="sort_order")
     if st.button("🛒 Lọc giỏ live") and filter_column:
