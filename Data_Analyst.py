@@ -151,7 +151,7 @@ if st.button("Lấy dữ liệu") or days_ago !=1:
             products = fetch_shopee_products(st.session_state["cookies"], session_id)
             df = pd.DataFrame(products)
             st.session_state["df"] = df  # Lưu vào session state
-            df_filtered = df[(df["Số lượng bán xác nhận"] != 0) & (df["Số lần nhấp chuột"] != 0)]
+            df_filtered = df
             df_filtered["Index"] = range(1, len(df_filtered) + 1)
             st.session_state["df_filtered"] = df_filtered
             st.markdown("""
@@ -191,8 +191,8 @@ if st.button("Lấy dữ liệu") or days_ago !=1:
 
             if all_products:
                 df = pd.DataFrame(all_products)
-                st.session_state["df"] = df  # Lưu vào session state
-                df_filtered = df[(df["Số lượng bán xác nhận"] != 0) & (df["Số lần nhấp chuột"] != 0)]
+                st.session_state["df"] = df
+                df_filtered=df# Lưu vào session state
                 df_filtered["Index"] = range(1, len(df_filtered) + 1)
                 st.session_state["df_filtered"] = df_filtered
                 st.markdown("""
